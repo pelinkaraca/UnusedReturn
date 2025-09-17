@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sağlam İade Raporları</title>
+  <style>
+    :root{
+      --green:#16A085; --purple:#8e2de2; --purple-700:#6f20b1;
+      --blue:#3b82f6; --blue-700:#2563eb;
+      --gray-50:#f7f7f8; --gray-200:#dfe3e8; --text:#24323b;
+      --danger:#dc2626; --danger-700:#b91c1c; --overlay:#0006;
+    }
+    *{box-sizing:border-box}
+    body{margin:0; font-family:Inter, system-ui, sans-serif; background:#fff; color:var(--text);}
+    .topbar{background:var(--green); color:#fff; padding:10px 16px; font-weight:600; display:flex; align-items:center; justify-content:flex-end; gap:20px;}
+    .topbar-item{display:flex; align-items:center; gap:6px; cursor:pointer;}
+    .topbar img{width:28px; height:28px; border-radius:50%;}
+    .container{max-width:1100px; margin:24px auto; padding:0 16px}
+    .header-bar{border:1px solid var(--gray-200); border-radius:12px; padding:16px; background:var(--gray-50); margin-bottom:16px}
+    .field{display:flex; gap:10px; margin-bottom:8px; align-items:center}
+    .label{width:160px; color:#6b7280}
+    .value{font-weight:600}
+    .select{min-width:200px; padding:6px; border:1px solid var(--gray-200); border-radius:8px}
+    .input{padding:8px 10px; border:1px solid var(--gray-200); border-radius:8px; min-width:220px; background:#fff}
+    .input[disabled]{background:#f3f4f6; color:#6b7280; cursor:not-allowed}
+    .status{padding:4px 10px; border-radius:999px; font-size:12px; font-weight:600}
+    .status.pending{background:#ecfeff; color:#0369a1}
+    .status.done{background:#ecfdf5; color:#166534}
+    .actions{text-align:center; margin:20px 0}
+    button{border:0; border-radius:6px; padding:8px 14px; font-weight:600; cursor:pointer}
+    .btn-primary{background:var(--purple); color:#fff}
+    .btn-primary:hover{background:var(--purple-700)}
+    .btn-approve{background:var(--blue); color:#fff}
+    .btn-approve:hover{background:var(--blue-700)}
+    .btn-cancel{background:#6b7280; color:#fff}
+    .btn-print{background:#10b981; color:#fff}
+    .btn-print:hover{background:#0ea371}
+    .table-wrap{border:1px solid var(--gray-200); border-radius:10px; overflow:hidden; margin-top:16px}
+    table{width:100%; border-collapse:collapse}
+    thead th{background:var(--green); color:#fff; padding:8px; text-align:left}
+    tbody td{padding:8px; border-top:1px solid var(--gray-200)}
+    .cell-center{text-align:center}
+    tbody tr.empty-row td{color:#9ca3af; font-style:italic; text-align:center}
+    .card-footer{display:flex; justify-content:center; gap:8px; padding:12px 0}
+    .btn-remove{width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center; border-radius:6px; background:var(--danger); color:#fff; font-weight:800; line-height:1;}
+    .btn-remove:hover{background:var(--danger-700)}
+    .col-narrow{width:44px}
+    .add-row{display:none; gap:8px; align-items:center; padding:12px 0; justify-content:flex-end;}
+    .muted{color:#6b7280; font-size:12px}
+    .hidden{display:none !important}
+    .barcode-preview{display:flex; align-items:center; gap:12px; flex-wrap:wrap}
+    .barcode-box{border:1px dashed var(--gray-200); border-radius:8px; padding:8px; background:#fff}
+    @media print {
+      .topbar, .actions, .card-footer, #addRow, .header-bar select, .header-bar button { display:none !important; }
+      .container{max-width:100%; margin:0; padding:0 12mm;}
+      body{background:#fff;}
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-item">Ana Sayfa</div>
+    <div class="topbar-item">☰ İşlemler ▾</div>
+    <div class="topbar-item">⚙️ Araçlar ▾</div>
+    <div class="topbar-item"><img src="https://via.placeholder.com/28" alt="profil"/> XYZ</div>
+  </div>
+
+  <div class="container">
+    <div class="header-bar">
+      <div class="field">
+        <div class="label">Sağlam İade Raporu</div>
+        <select id="reportSelect" class="select"></select>
+      </div>
+      <div class="field">
+        <div class="label">Rapor Durumu</div>
+        <div class="value"><span id="statusChip" class="status">—</span></div>
+      </div>
+      <div class="field">
+        <div class="label">Oluşturulma Tarihi</div>
+        <div id="createdAt" class="value">—</div>
+      </div>
+
+      <div class="field">
+        <div class="label">Barkod</div>
+        <div class="barcode-preview">
+          <input id="barcodeInput" class="input" inputmode="numeric" autocomplete="off"
+                 placeholder="— sistem tarafından atanır —" disabled readonly />
+          <div id="barcodePreview" class="barcode-box"></div>
+        </div>
+      </div>
+      <div class="field" style="margin-top:-4px">
+        <div class="label"></div>
+        <div class="hint">Barkod, rapor oluşturulduğunda sistem tarafından <b>12 haneli</b> olarak otomatik atanır ve değiştirilemez.</div>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="col-narrow"></th>
+            <th>Fiş No</th>
+            <th>Malzeme</th>
+            <th>Açıklama</th>
+            <th class="cell-center">Adet</th>
+          </tr>
+        </thead>
+        <tbody id="itemsBody">
+          <tr class="empty-row"><td colspan="5"> </td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="addRow" class="add-row">
+      <span class="muted">Malzeme Kodu:</span>
+      <input id="addCodeInput" class="input" placeholder="örn. 223344" />
+      <button id="addBtn" class="btn-primary">Malzeme Ekle</button>
+    </div>
+
+    <div class="actions">
+      <button id="btn-new" class="btn-primary">Yeni Rapor Oluştur</button>
+    </div>
+
+    <div class="card-footer" id="footerBtns" style="display:none;">
+      <button id="approveBtn" class="btn-approve">Raporu Onayla</button>
+      <button id="cancelBtn" class="btn-cancel">Raporu İptal Et</button>
+      <button id="printBtn" class="btn-print hidden">Yazdır (PDF)</button>
+    </div>
+  </div>
+
+  <script>
+    // ==== IN-MEMORY STORE (reload’da sıfırlanır) ====
+    const Store = { reports: [] };
+
+    // Malzeme gamı (örnek)
+    const MATERIALS = [
+      {code:'112233',  name:'Pompa Motoru'},
+      {code:'223344', name:'Filtre Seti'},
+      {code:'334455', name:'Fan Motoru'},
+      {code:'445566', name:'Kompresör'},
+      {code:'667788', name:'Amortisör'},
+      {code:'778899', name:'Temizleyici'},
+    ];
+
+    // 🆕 Stokta olmayan ama eklenmesine izin verilen kodlar (uyarıyla)
+    const NONSTOCK_MAP = {
+      '001122': 'Conta',
+      '002233': 'Kapı'
+    };
+
+    // ---------- Utils ----------
+    const uid=()=>String(Math.floor(1000000+Math.random()*9000000));
+    const nowStr=()=>new Date().toLocaleString('tr-TR',{year:'2-digit',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',','');
+    const randomFisNo=()=>String(Math.floor(100000000 + Math.random()*900000000));
+    const pickSome=(arr,n=3)=>{const a=[...arr];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a.slice(0,Math.min(n,a.length));};
+    const isValidBarcode=v=>/^\d{12}$/.test((v||'').trim());
+
+    function genBarcode12(){
+      const d=new Date();
+      const pad=(n,l=2)=>String(n).padStart(l,'0');
+      const base = pad(d.getSeconds())+pad(d.getMinutes())+pad(d.getHours())+pad(d.getDate());
+      const rand = String(Math.floor(1000+Math.random()*9000));
+      return (base+rand).slice(0,12);
+    }
+
+    function code39SVG(text,{height=60, module=2, margin=8, showText=true}={}){
+      const map={
+        '0':"101001101101",'1':"110100101011",'2':"101100101011",'3':"110110010101",
+        '4':"101001101011",'5':"110100110101",'6':"101100110101",'7':"101001011011",
+        '8':"110100101101",'9':"101100101101",'A':"110101001011",'B':"101101001011",
+        'C':"110110100101",'D':"101011001011",'E':"110101100101",'F':"101101100101",
+        'G':"101010011011",'H':"110101001101",'I':"101101001101",'J':"101011001101",
+        'K':"110101010011",'L':"101101010011",'M':"110110101001",'N':"101011010011",
+        'O':"110101101001",'P':"101101101001",'Q':"101010110011",'R':"110101011001",
+        'S':"101101011001",'T':"101011011001",'U':"110010101011",'V':"100110101011",
+        'W':"110011010101",'X':"100101101011",'Y':"110010110101",'Z':"100110110101",
+        '-':"100101011011",'.':"110010101101",' ':"100110101101",'$':"100100100101",
+        '/':"100100101001","+":"100101001001","%":"101001001001","*":"100101101101"
+      };
+      const up = String(text).toUpperCase();
+      if(![...up].every(ch=>map[ch]!==undefined)) return `<svg/>`;
+      const full="*"+up+"*";
+      const modules=[];
+      for(const ch of full){
+        const pattern=map[ch];
+        for(let i=0;i<pattern.length;i++){
+          modules.push(pattern[i]==='1');
+        }
+        modules.push(false);
+      }
+      const w=modules.length*module + margin*2;
+      const h=height + (showText?16:0) + margin*2;
+      let x=margin;
+      let bars="";
+      modules.forEach(bit=>{
+        if(bit){
+          bars+=`<rect x="${x}" y="${margin}" width="${module}" height="${height}" rx="0" ry="0"></rect>`;
+        }
+        x+=module;
+      });
+      const textY=margin+height+12;
+      const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+        <g fill="#000">${bars}</g>
+        ${showText?`<text x="${w/2}" y="${textY}" text-anchor="middle" font-family="monospace" font-size="12">${text}</text>`:''}
+      </svg>`;
+      return svg;
+    }
+
+    // ---------- Storage-like helpers (in-memory) ----------
+    const loadReports=()=>Store.reports;
+    const saveReports=list=>{ Store.reports = list; };
+    function createReport(){
+      const list=loadReports();
+      const report={
+        id:uid(),
+        status:'pending',
+        createdAt:nowStr(),
+        barcode: genBarcode12(),
+        items:seedDefaultItems()
+      };
+      list.unshift(report); saveReports(list); return report.id;
+    }
+    function updateReport(id,patch){
+      const list=loadReports(); const i=list.findIndex(r=>r.id===id);
+      if(i>-1){list[i]={...list[i],...patch}; saveReports(list); return list[i];}
+      return null;
+    }
+    function deleteReport(id){ saveReports(loadReports().filter(r=>r.id!==id)); }
+    const seedDefaultItems=()=>pickSome(MATERIALS,3).map(m=>({fis:randomFisNo(),malzeme:m.code,aciklama:m.name,adet:1}));
+
+    // ---------- DOM refs ----------
+    const reportSelect=document.getElementById('reportSelect');
+    const statusChip=document.getElementById('statusChip');
+    const createdAt=document.getElementById('createdAt');
+    const itemsBody=document.getElementById('itemsBody');
+    const approveBtn=document.getElementById('approveBtn');
+    const cancelBtn=document.getElementById('cancelBtn');
+    const printBtn=document.getElementById('printBtn');
+    const footerBtns=document.getElementById('footerBtns');
+    const addRow=document.getElementById('addRow');
+    const addBtn=document.getElementById('addBtn');
+    const addCodeInput=document.getElementById('addCodeInput');
+    const barcodeInput=document.getElementById('barcodeInput');
+    const barcodePreview=document.getElementById('barcodePreview');
+
+    // ---------- UI helpers ----------
+    function setStatusChip(status){
+      if(!status){statusChip.textContent='—';statusChip.className='status';return;}
+      statusChip.className='status '+(status==='done'?'done':'pending');
+      statusChip.textContent=status==='done'?'Onaylandı':'Onay Bekleniyor';
+    }
+    function renderSelectOptions(){
+      const list=loadReports();
+      reportSelect.innerHTML='';
+      list.forEach(r=>{
+        const opt=document.createElement('option'); opt.value=r.id; opt.textContent=r.id; reportSelect.appendChild(opt);
+      });
+      reportSelect.value='';
+    }
+    function resetToBlank(){
+      renderSelectOptions();
+      setStatusChip(null);
+      createdAt.textContent='—';
+      itemsBody.innerHTML='<tr class="empty-row"><td colspan="5"> </td></tr>';
+      footerBtns.style.display='none';
+      addRow.style.display='none';
+      [addBtn, addCodeInput, approveBtn, cancelBtn, printBtn].forEach(el=>el.disabled=true);
+      barcodeInput.value=''; barcodeInput.classList.remove('error'); barcodeInput.disabled=true;
+      barcodePreview.innerHTML='';
+      printBtn.classList.add('hidden');
+    }
+    function controlByStatus(report){
+      const isPending = !!report && report.status==='pending';
+      approveBtn.disabled = !isPending;
+      cancelBtn.disabled  = !isPending;
+      addBtn.disabled     = !isPending;
+      addCodeInput.disabled = !isPending;
+      barcodeInput.disabled = true;
+      addRow.style.display  = isPending ? 'flex' : 'none';
+      printBtn.classList.toggle('hidden', !(report && report.status==='done'));
+      printBtn.disabled = !(report && report.status==='done');
+    }
+
+    function renderItems(report){
+      itemsBody.innerHTML='';
+      if(!report || !report.items.length){
+        itemsBody.innerHTML='<tr class="empty-row"><td colspan="5"> </td></tr>'; return;
+      }
+      report.items.forEach((it,i)=>{
+        const canEdit = report.status==='pending';
+        const tr=document.createElement('tr');
+        tr.innerHTML=`
+          <td class="cell-center">${canEdit?`<button class="btn-remove" data-remove="${i}" title="Satırı sil">×</button>`:''}</td>
+          <td>${it.fis||''}</td>
+          <td>${it.malzeme}</td>
+          <td>${it.aciklama||''}</td>
+          <td class="cell-center">${it.adet}</td>`;
+        itemsBody.appendChild(tr);
+      });
+      itemsBody.onclick = e => {
+        const btn = e.target.closest('[data-remove]'); if(!btn) return;
+        const idx = Number(btn.dataset.remove);
+        const list=loadReports(); const id=reportSelect.value; const i=list.findIndex(r=>r.id===id);
+        if(i===-1 || list[i].status!=='pending') return;
+        list[i].items.splice(idx,1); saveReports(list); selectReport(id);
+      };
+    }
+
+    function renderBarcodePreview(bc){
+      if(!isValidBarcode(bc)){ barcodePreview.innerHTML=''; return; }
+      barcodePreview.innerHTML = code39SVG(bc,{height:60,module:2,margin:6,showText:true});
+    }
+
+    function selectReport(id){
+      if(!id){ resetToBlank(); return; }
+      const list=loadReports(); const report=list.find(r=>r.id===id);
+      if(!report){ resetToBlank(); return; }
+      renderSelectOptions(); reportSelect.value=id;
+      setStatusChip(report.status);
+      createdAt.textContent=report.createdAt||'—';
+      barcodeInput.value = report.barcode || '—';
+      renderBarcodePreview(report.barcode||'');
+      renderItems(report);
+      footerBtns.style.display='flex';
+      controlByStatus(report);
+    }
+
+    // ---------- Actions ----------
+    document.getElementById('btn-new').onclick=()=>{
+      const id=createReport();
+      selectReport(id);
+    };
+
+    approveBtn.onclick=()=>{
+      const id=reportSelect.value; if(!id) return;
+      const list=loadReports(); const r=list.find(x=>x.id===id);
+      if(!r) return;
+
+      const bc=(r.barcode||'').trim();
+      if(!isValidBarcode(bc)){
+        alert('Sistem barkodu bulunamadı ya da 12 haneli değil. Lütfen yöneticinizle iletişime geçin.');
+        return;
+      }
+
+      const count = (r.items||[]).length;
+      const ok = confirm(`İade edilecek listeyi onaylıyor musunuz?\nToplam kalem: ${count}\nOnay sonrası değişiklik yapılamaz.`);
+      if(!ok) return;
+
+      const upd=updateReport(id,{status:'done'});
+      setStatusChip(upd.status);
+      controlByStatus(upd);
+    };
+
+    cancelBtn.onclick=()=>{
+      const id=reportSelect.value; if(!id) return;
+      const list=loadReports(); const r=list.find(x=>x.id===id);
+      if(!r || r.status!=='pending') return;
+      if(!confirm('Bu rapor iptal edilecek ve listeden kaldırılacak. Devam edilsin mi?')) return;
+      deleteReport(id);
+      resetToBlank();
+    };
+
+    reportSelect.onchange=e=>selectReport(e.target.value);
+
+    function addNewItemByCode(){
+      // 🆕 Kod + opsiyonel isim girişine tolerans: "001122 conta" yazılırsa ilk token kod olarak alınır
+      const raw=(addCodeInput.value||'').trim();
+      const code = raw.split(/\s+/)[0];
+      if(!code) return;
+      const id=reportSelect.value; if(!id) return;
+      const list=loadReports(); const i=list.findIndex(r=>r.id===id); if(i===-1) return;
+      if(list[i].status!=='pending') return;
+
+      // 🆕 Stokta olmayan ama izin verilen kodlar için uyarılı onay
+      if (Object.prototype.hasOwnProperty.call(NONSTOCK_MAP, code)) {
+        const ok = confirm('Bu malzemeler stoğunuzda yok. Eklemek istediğinize emin misiniz?');
+        if (!ok) return;
+        list[i].items.push({ fis:'', malzeme: code, aciklama: NONSTOCK_MAP[code], adet:1 });
+        saveReports(list); addCodeInput.value=''; selectReport(id);
+        return;
+      }
+
+      const found=MATERIALS.find(m=>m.code===code);
+
+      // 🔒 Gam dışı kod engeli + uyarı (NONSTOCK_MAP dışında kalanlar)
+      if(!found){
+        alert('Eklediğiniz materyal tanımlı değildir.');
+        return;
+      }
+
+      list[i].items.push({fis:'', malzeme:code, aciklama:found.name, adet:1});
+      saveReports(list); addCodeInput.value=''; selectReport(id);
+    }
+    addBtn.onclick=addNewItemByCode;
+    addCodeInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addNewItemByCode();}});
+
+    // ---------- Yazdır / PDF ----------
+    printBtn.onclick = () => {
+      const id = reportSelect.value; if (!id) return;
+      const r = (Store.reports || []).find(x => x.id === id); if (!r) return;
+      if (r.status !== 'done') { alert('Sadece onaylanmış raporlar yazdırılabilir.'); return; }
+
+      const rows = (r.items || []).map(it => `
+        <tr>
+          <td style="padding:6px;border-bottom:1px solid #e5e7eb">${it.fis || ''}</td>
+          <td style="padding:6px;border-bottom:1px solid #e5e7eb">${it.malzeme}</td>
+          <td style="padding:6px;border-bottom:1px solid #e5e7eb">${it.aciklama || ''}</td>
+          <td style="padding:6px;border-bottom:1px solid #e5e7eb;text-align:center">${it.adet}</td>
+        </tr>`).join('');
+
+      const bcSVG = code39SVG(r.barcode, { height: 80, module: 2, margin: 10, showText: true });
+
+      const html = `
+        <!doctype html><html><head><meta charset="utf-8">
+        <title>Rapor ${r.id} - Yazdır</title>
+        <style>
+          @page{size:A4;margin:12mm}
+          body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#111827}
+          h1{font-size:18px;margin:0 0 6px}
+          .muted{color:#6b7280}
+          .head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}
+          .card{border:1px solid #e5e7eb;border-radius:10px;padding:12px}
+          table{width:100%;border-collapse:collapse;font-size:12px}
+          th{background:#0f8a70;color:#fff;text-align:left;padding:6px}
+        </style>
+        </head>
+        <body>
+          <div class="head">
+            <div>
+              <h1>Sağlam İade Raporu</h1>
+              <div class="muted">Rapor No: <b>${r.id}</b></div>
+              <div class="muted">Oluşturulma: <b>${r.createdAt}</b></div>
+              <div class="muted">Durum: <b>Onaylandı</b></div>
+            </div>
+            <div class="card">${bcSVG}</div>
+          </div>
+
+          <table>
+            <thead>
+              <tr><th>Fiş No</th><th>Malzeme</th><th>Açıklama</th><th style="text-align:center">Adet</th></tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <script>window.onload = function(){ setTimeout(function(){ window.print(); }, 50); };<\/script>
+        </body></html>
+      `;
+
+      // Pop-up engelleyicilere karşı önce boş sayfa aç, sonra yaz
+      let w = window.open('about:blank');
+      if (w && w.document) {
+        try {
+          w.document.open();
+          w.document.write('<!doctype html><title>Yazdırılıyor…</title><body>Yazdırma içeriği hazırlanıyor…</body>');
+          w.document.close();
+          // İçeriği kısa bir gecikme ile yaz ki açılış kullanıcı etkileşimine bağlansın
+          setTimeout(() => {
+            w.document.open();
+            w.document.write(html);
+            w.document.close();
+          }, 10);
+          return;
+        } catch (e) {
+          // devama fallback
+        }
+      }
+
+      // Fallback: aynı pencerede yazdır (uygulama görünümü geçici olarak değişir)
+      const original = document.documentElement.innerHTML;
+      document.documentElement.innerHTML = html;
+      setTimeout(() => {
+        window.print();
+        // Yazdırma diyalogundan sonra sayfayı yenileyerek uygulamayı geri yükle
+        window.location.reload();
+      }, 50);
+    };
+  </script>
+</body>
+</html>
